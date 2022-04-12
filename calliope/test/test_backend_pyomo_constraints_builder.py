@@ -1,5 +1,7 @@
 import pytest
 import calliope.backend.constraints as constraints
+from pyomo.core import ConcreteModel
+import calliope.backend.pyomo.util
 
 
 def test_parsing_basic_equation():
@@ -12,7 +14,13 @@ def test_parsing_equation_with_complex_operation():
 
 def test_parsing_equation_with_square_brackets():
     assert constraints.parse_equation_to_list(
-        'some_word[x, y] <= another_word[x, y]') == ['some_word[x, y]', '<=',  'another_word[x, y]']
+        'some_word[x, y] <= another_word[x, y]') == ['some_word[x, y]', '<=', 'another_word[x, y]']
+
+
+@pytest.mark.xfail()
+def test_parsing_equation_with_round_brackets():
+    assert constraints.parse_equation_to_list(
+        'A <= (B + C) * D') == ['A', '<=', ['B', '+', 'C'], '*', 'D']
 
 
 def test_valid_simple_equation_passes_formatting_validation():
@@ -24,7 +32,7 @@ def test_valid_complex_equation_passes_formatting_validation():
 
 
 def test_equation_with_square_brackets_passes_formatting_validation():
-    assert constraints._validate_equation_list_formatting(['some_word[x, y]', '<=',  'another_word[x, y]'])
+    assert constraints._validate_equation_list_formatting(['some_word[x, y]', '<=', 'another_word[x, y]'])
 
 
 def test_equation_without_rhs_raises_error_when_validating_formatting():
@@ -79,6 +87,69 @@ def test_extracting_function_variables_with_single_var_function():
 
 def test_extracting_function_variables_from_malformed_function_also_works():
     assert constraints._extract_function_variables('resource_unit[node, tech') == ['node', 'tech']
+
+
+def test_ordering_operators_in_simple_equation():
+    sorted_idx = constraints._get_operator_hierarchy(['A', '==', 'B', '+', 'C'])
+    assert sorted_idx == [3, 1]
+
+
+def test_ordering_operators_in_a_complex_equation():
+    sorted_idx = constraints._get_operator_hierarchy(['A', '==', 'B', '+', 'C', '*', 'D'])
+    assert sorted_idx == [5, 3, 1]
+
+
+@pytest.mark.xfail()
+def test_ordering_operators_in_a_equation_with_brackets():
+    sorted_idx = constraints._get_operator_hierarchy(['A', '==', ['B', '+', 'C'], '*', 'D'])
+    assert sorted_idx == [3, 5, 1]
+
+
+def test_building_wholly_numerical_equation():
+    eqn = constraints.build_equation_from_string(
+        '1 + 2',
+        None,
+        config={}
+    )
+    assert eqn(backend_model=None) == 3
+
+
+@pytest.fixture()
+def two_param_backend_model():
+    backend_model = ConcreteModel()
+    backend_model.A = {(1, 2): 3}
+    backend_model.B = {(1, 2): 7}
+    return {'backend_model': backend_model,
+            'param_1': 'A[x, y]', 'param_2': 'B[x, y]',
+            'x_idx': 1, 'y_idx': 2,
+            'param_1_value': 3, 'param_2_value': 7}
+
+
+def test_building_simple_equation(two_param_backend_model):
+    eqn = constraints.build_equation_from_string(
+        f'{two_param_backend_model["param_1"]} + {two_param_backend_model["param_2"]}',
+        two_param_backend_model['backend_model'],
+        config={}
+    )
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']
+
+
+@pytest.mark.xfail()
+def test_building_equation_with_components(two_param_backend_model):
+    eqn = constraints.build_equation_from_string(
+        f'comp_a + comp_b',
+        two_param_backend_model['backend_model'],
+        config={'components': {'comp_a': two_param_backend_model["param_1"], 'comp_b': two_param_backend_model["param_2"]}}
+    )
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']
 
 
 @pytest.fixture()
@@ -149,11 +220,13 @@ def balance_supply_plus_constraint_config():
     }
 
 
+@pytest.mark.xfail()
 def test_creating_constraint_function_from_constraint_dictionary(balance_supply_constraint_config):
     rule = constraints.create_valid_constraint_rule(None, 'balance_supply', balance_supply_constraint_config)
-    rule(None)
+    rule(None, node='1', tech='2')
 
 
+@pytest.mark.xfail()
 def test_creating_multiple_constraint_functions_results_in_unique_functions(balance_supply_constraint_config,
                                                                             balance_supply_plus_constraint_config):
     rule_bs = constraints.create_valid_constraint_rule(None, 'balance_supply', balance_supply_constraint_config)

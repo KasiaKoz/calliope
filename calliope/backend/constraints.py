@@ -10,6 +10,7 @@ Create constraints for the model.
 """
 import operator
 import re
+from calliope.backend.pyomo.util import get_param
 
 SUPPORTED_OPERATORS = {
     '+': operator.add,
@@ -24,6 +25,7 @@ SUPPORTED_OPERATORS = {
     '<=': operator.le,
     '>=': operator.ge
 }
+OPERATOR_HIERARCHY = ['*', '**', '/', '+', '-', '>', '<', '>=', '<=', '==', '!=']
 OPERATOR_PATTERN = r'([^a-zA-Z0-9_ \,\]\[])'
 NUMBER_PATTERN = r'([0-9])'
 EXPRESSION_PATTERN = r'(\w+)'
@@ -31,8 +33,17 @@ FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)?\]'
 
 
 def math_operation(operator: str, a, b):
+    def template_operation(backend_model, **kwargs):
+        if isinstance(a, float) and isinstance(b, float):
+            return operate(a, b)
+        elif isinstance(a, float):
+            return operate(a, b(backend_model, **kwargs))
+        elif isinstance(b, float):
+            return operate(a(backend_model, **kwargs), b)
+        return operate(a(backend_model, **kwargs), b(backend_model, **kwargs))
     if operator in SUPPORTED_OPERATORS:
-        return SUPPORTED_OPERATORS[operator](a, b)
+        operate = SUPPORTED_OPERATORS[operator]
+        return template_operation
     else:
         raise NotImplemented(f'Operator {operator} is not supported. Supported operators: {list(SUPPORTED_OPERATORS)}')
 
@@ -82,13 +93,74 @@ def _validate_equation_list_formatting(equation: list):
     return equation_is_valid
 
 
-def build_equation_from_list(equation: list, config: dict):
+def _get_operator_hierarchy(equation: list):
+    # assumes valid formatting: _validate_equation_list_formatting
+    operator_indices = list(range(1, len(equation), 2))
+    operator_hierarchy = [OPERATOR_HIERARCHY.index(equation[op_idx]) for op_idx in operator_indices]
+    return [op_idx for _, op_idx in sorted(zip(operator_hierarchy, operator_indices))]
+
+
+def _get_index_of_next_operator(equation: list):
+    # assumes valid formatting: _validate_equation_list_formatting
+    idx_next = None
+    current_hierarchy = len(OPERATOR_HIERARCHY)
+    for i in range(1, len(equation), 2):
+        op_hchy = OPERATOR_HIERARCHY.index(equation[i])
+        if op_hchy <= current_hierarchy:
+            idx_next = i
+            current_hierarchy = op_hchy
+    if idx_next is None:
+        raise NotImplemented('')
+    return idx_next
+
+
+def _process_component(component, backend_model, config, **kwargs):
+    def function_template(backend_model, **kwargs):
+        return get_param(backend_model, name, tuple([kwargs[var] for var in variables]))
+
+    if re.match(NUMBER_PATTERN, component):
+        return float(component)
+    if _is_function(component):
+        name, variables = parse_function_string(component)
+        return function_template
+    else:
+        raise NotImplemented(f'Component: {component} could not be processed')
+
+
+
+def collapse_equation_list_on_next_operation(equation: list, backend_model, config: dict):
+    # TODO include brackets and order of evaluation
+    operator_idx = _get_index_of_next_operator(equation)
+    lhs = _process_component(equation[operator_idx - 1], backend_model, config)
+    rhs = _process_component(equation[operator_idx + 1], backend_model, config)
+    equation[operator_idx - 1:operator_idx + 2] = [math_operation(equation[operator_idx], lhs, rhs)]
+    return equation
+
+
+def build_equation_from_string(equation, backend_model, config):
+    # def function_template(backend_model, *args):
+    #     build_equation(equation)
+
+    equation = parse_equation_to_list(equation)
     # check equation is valid first:
     _validate_equation_list_formatting(equation)
     # TODO add more logic/domain checks
-    # TODO include brackets and order of evaluation
-    # TODO build the eqn
-    return equation
+    while len(equation) > 1:
+        equation = collapse_equation_list_on_next_operation(equation, backend_model, config)
+    return equation[0]
+
+
+def build_equation_from_component(component, backend_model, config):
+    if isinstance(component, list):
+        for condition in component:
+            condition_succeeded, equation = evaluate_condition(condition)
+            if condition_succeeded:
+                return build_equation_from_string(equation)
+    elif isinstance(component, str):
+        # the component is already an equation, does not depend on any conditions
+        return build_equation_from_string(component)
+    else:
+        raise NotImplemented(f'Component of type {type(component)} is not understood')
 
 
 def _is_function(string: str):
@@ -142,12 +214,9 @@ def evaluate_condition(condition: dict):
 def create_valid_constraint_rule(model_data, name, config):
     """
     """
-    def function_template(backend_model, *args):
-        for condition in config['equation']:
-            condition_succeeded, equation = evaluate_condition(condition)
-            if condition_succeeded:
-                equation_list = parse_equation_to_list(equation)
-                return build_equation_from_list(equation_list, config)
+
+    def function_template(backend_model, **kwargs):
+        return build_equation_from_component(config['equation'], backend_model, config)
 
     # TODO port subset masking here possibly
     # subsets = ...
