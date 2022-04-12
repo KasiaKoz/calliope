@@ -25,6 +25,8 @@ SUPPORTED_OPERATORS = {
     '>=': operator.ge
 }
 OPERATOR_PATTERN = r'([^a-zA-Z0-9_ \,\]\[])'
+NUMBER_PATTERN = r'([0-9])'
+EXPRESSION_PATTERN = r'(\w+)'
 FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)?\]'
 
 
@@ -36,7 +38,7 @@ def math_operation(operator: str, a, b):
 
 
 def _combine_consecutive_operators(l: list):
-    # The operators are assumed as characters that are are non-alphanumeric or _
+    # The operators are assumed as characters that are non-alphanumeric or _
     # they are not checked against the supported operator for actually being understood at this point
     combined_l = []
     while l:
@@ -62,10 +64,11 @@ def _validate_equation_list_formatting(equation: list):
     # first step to a well-defined equations is following this format:
     # - operators sandwiched by params
     # - operators do not exist on peripherals
+    # TODO include brackets and order of evaluation
     equation_is_valid = True
     for i, eqn_component in enumerate(equation):
         if i % 2:
-            if not re.match(OPERATOR_PATTERN, eqn_component):
+            if re.match(EXPRESSION_PATTERN, eqn_component):
                 equation_is_valid = False
         else:
             if re.match(OPERATOR_PATTERN, eqn_component):
@@ -76,12 +79,14 @@ def _validate_equation_list_formatting(equation: list):
 
     if not equation_is_valid:
         raise AssertionError(f'Equation {equation} is not valid')
+    return equation_is_valid
 
 
 def build_equation_from_list(equation: list, config: dict):
     # check equation is valid first:
     _validate_equation_list_formatting(equation)
     # TODO add more logic/domain checks
+    # TODO include brackets and order of evaluation
     # TODO build the eqn
     return equation
 

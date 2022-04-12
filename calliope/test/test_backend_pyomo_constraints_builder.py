@@ -10,32 +10,36 @@ def test_parsing_equation_with_complex_operation():
     assert constraints.parse_equation_to_list('some_word <= another_word') == ['some_word', '<=', 'another_word']
 
 
-def test_parsing_equation_with_brackets():
+def test_parsing_equation_with_square_brackets():
     assert constraints.parse_equation_to_list(
         'some_word[x, y] <= another_word[x, y]') == ['some_word[x, y]', '<=',  'another_word[x, y]']
 
 
-def test_validating_formatting_of_valid_simple_equation_passes():
+def test_valid_simple_equation_passes_formatting_validation():
     constraints._validate_equation_list_formatting(['some_word', '<=', 'another_word'])
 
 
-def test_validating_formatting_of_valid_complex_equation_passes():
+def test_valid_complex_equation_passes_formatting_validation():
     constraints._validate_equation_list_formatting(['some_word', '<=', 'another_word', '<=', 'something'])
 
 
-def test_validating_formatting_of_equation_without_rhs_raises_error():
+def test_equation_with_square_brackets_passes_formatting_validation():
+    assert constraints._validate_equation_list_formatting(['some_word[x, y]', '<=',  'another_word[x, y]'])
+
+
+def test_equation_without_rhs_raises_error_when_validating_formatting():
     with pytest.raises(AssertionError) as error_info:
         constraints._validate_equation_list_formatting(['<=', 'some_word'])
     assert "not valid" in str(error_info.value)
 
 
-def test_validating_formatting_of_equation_without_lhs_raises_error():
+def test_equation_without_lhs_raises_error_when_validating_formatting():
     with pytest.raises(AssertionError) as error_info:
         constraints._validate_equation_list_formatting(['some_word', '<='])
     assert "not valid" in str(error_info.value)
 
 
-def test_validating_formatting_of_equation_with_multiple_consecutive_operators_raises_error():
+def test_equation_with_multiple_consecutive_operators_raises_error_when_validating_formatting():
     with pytest.raises(AssertionError) as error_info:
         constraints._validate_equation_list_formatting(['some_word', '<=', '=', 'blah'])
     assert "not valid" in str(error_info.value)
