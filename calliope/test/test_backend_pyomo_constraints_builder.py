@@ -108,7 +108,6 @@ def test_ordering_operators_in_a_equation_with_brackets():
 def test_building_wholly_numerical_equation():
     eqn = constraints.build_equation_from_string(
         '1 + 2',
-        None,
         config={}
     )
     assert eqn(backend_model=None) == 3
@@ -128,7 +127,6 @@ def two_param_backend_model():
 def test_building_simple_equation(two_param_backend_model):
     eqn = constraints.build_equation_from_string(
         f'{two_param_backend_model["param_1"]} + {two_param_backend_model["param_2"]}',
-        two_param_backend_model['backend_model'],
         config={}
     )
     assert eqn(
@@ -138,11 +136,9 @@ def test_building_simple_equation(two_param_backend_model):
     ) == two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']
 
 
-@pytest.mark.xfail()
 def test_building_equation_with_components(two_param_backend_model):
     eqn = constraints.build_equation_from_string(
-        f'comp_a + comp_b',
-        two_param_backend_model['backend_model'],
+        'comp_a + comp_b',
         config={'components': {'comp_a': two_param_backend_model["param_1"], 'comp_b': two_param_backend_model["param_2"]}}
     )
     assert eqn(

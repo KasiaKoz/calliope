@@ -114,30 +114,32 @@ def _get_index_of_next_operator(equation: list):
     return idx_next
 
 
-def _process_component(component, backend_model, config, **kwargs):
+def _process_component(component, config):
     def function_template(backend_model, **kwargs):
         return get_param(backend_model, name, tuple([kwargs[var] for var in variables]))
 
     if re.match(NUMBER_PATTERN, component):
         return float(component)
-    if _is_function(component):
+    elif _is_function(component):
         name, variables = parse_function_string(component)
         return function_template
+    elif config['components']:
+        return build_equation_from_component(config['components'][component], config)
     else:
         raise NotImplemented(f'Component: {component} could not be processed')
 
 
 
-def collapse_equation_list_on_next_operation(equation: list, backend_model, config: dict):
+def collapse_equation_list_on_next_operation(equation: list, config: dict):
     # TODO include brackets and order of evaluation
     operator_idx = _get_index_of_next_operator(equation)
-    lhs = _process_component(equation[operator_idx - 1], backend_model, config)
-    rhs = _process_component(equation[operator_idx + 1], backend_model, config)
+    lhs = _process_component(equation[operator_idx - 1], config)
+    rhs = _process_component(equation[operator_idx + 1], config)
     equation[operator_idx - 1:operator_idx + 2] = [math_operation(equation[operator_idx], lhs, rhs)]
     return equation
 
 
-def build_equation_from_string(equation, backend_model, config):
+def build_equation_from_string(equation, config):
     # def function_template(backend_model, *args):
     #     build_equation(equation)
 
@@ -146,19 +148,23 @@ def build_equation_from_string(equation, backend_model, config):
     _validate_equation_list_formatting(equation)
     # TODO add more logic/domain checks
     while len(equation) > 1:
-        equation = collapse_equation_list_on_next_operation(equation, backend_model, config)
+        equation = collapse_equation_list_on_next_operation(equation, config)
     return equation[0]
 
 
-def build_equation_from_component(component, backend_model, config):
+def build_equation_from_component(component, config):
     if isinstance(component, list):
         for condition in component:
             condition_succeeded, equation = evaluate_condition(condition)
             if condition_succeeded:
-                return build_equation_from_string(equation)
+                return build_equation_from_string(equation, config)
     elif isinstance(component, str):
-        # the component is already an equation, does not depend on any conditions
-        return build_equation_from_string(component)
+        if _is_function(component):
+            # bypass equation build and skip to getting the param
+            return _process_component(component, config)
+        else:
+            # the component is already an equation, does not depend on any conditions
+            return build_equation_from_string(component, config)
     else:
         raise NotImplemented(f'Component of type {type(component)} is not understood')
 
