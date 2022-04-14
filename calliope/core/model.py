@@ -134,6 +134,12 @@ class Model(object):
             observer=self._model_data,
         )
 
+        self.constraints = UpdateObserverDict(
+            initial_dict=model_run.get("constraints").as_dict_flat(),
+            name="constraints",
+            observer=self._model_data,
+        )
+
         log_time(
             logger,
             self._timings,

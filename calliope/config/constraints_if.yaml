@@ -59,12 +59,12 @@ constraints:
                 over=[carrier_in in carriers_in]
                 }
         index_items:
-            tier_out:
-                select: "out"
-                on_dimension: carrier_tiers
-            tier_out:
-                select: "in"
-                on_dimension: carrier_tiers
+#            tier_out:
+#                select: "out"
+#                on_dimension: carrier_tiers
+#            tier_out:
+#                select: "in"
+#                on_dimension: carrier_tiers
             carriers_out:
                 select: get_carrier{carrier, carrier_tiers="out"}
                 on_dimension: carriers
@@ -267,7 +267,7 @@ constraints:
         equation:
             - if: include_storage[node, tech] == False
               then: available_resource == carrier_prod_incl_losses
-              else: storage[node, tech, timestep] == storage_at_timestep_start + available_resource - carrier_prod_incl_losses
+            - else: storage[node, tech, timestep] == storage_at_timestep_start + available_resource - carrier_prod_incl_losses
         components:
             carrier_prod_incl_losses:
                 - if: energy_eff[node, tech, timestep] == 0 | parasitic_eff[node, tech, timestep] == 0

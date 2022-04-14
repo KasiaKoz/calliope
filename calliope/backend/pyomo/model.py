@@ -29,6 +29,7 @@ from calliope.backend.pyomo.util import (
 )
 from calliope.backend.subsets import create_valid_subset
 from calliope.backend.pyomo import constraints
+from calliope.backend import constraints as _constraints
 from calliope.core.util.tools import load_function
 from calliope.core.util.logging import LogWriter
 from calliope.core.util.dataset import reorganise_xarray_dimensions
@@ -130,17 +131,25 @@ def _load_rule_function(name):
         return None
 
 
-def build_constraints(backend_model, model_data, constraint_definitions):
-    for constraint_name, constraint_config in constraint_definitions.items():
+def build_constraints(backend_model, model_data, subset_constraints, constraint_definitions):
+    for constraint_name, constraint_config in subset_constraints.items():
+        # TODO update post subset + constraints consolidation
         subset = create_valid_subset(model_data, constraint_name, constraint_config)
         if subset is None:
             continue
+        # # if constraint_name in constraint_definitions
+        # if 'balance_supply' in constraint_name:
+        #     rule = _constraints.create_valid_constraint_rule(
+        #         model_data, constraint_name, constraint_definitions[constraint_name])
+        # else:
+        #     rule = _load_rule_function(f"{constraint_name}_constraint_rule")
+        rule = _load_rule_function(f"{constraint_name}_constraint_rule")
         setattr(
             backend_model,
             f"{constraint_name}_constraint",
             po.Constraint(
                 subset,
-                rule=_load_rule_function(f"{constraint_name}_constraint_rule"),
+                rule=rule
             ),
         )
 
@@ -184,11 +193,12 @@ def generate_model(model_data):
     model_data = datetime_to_string(backend_model, model_data)
 
     subsets_config = AttrDict.from_yaml_string(model_data.attrs["subsets"])
+    constraints_config = AttrDict.from_yaml_string(model_data.attrs["constraints"])
     build_sets(model_data, backend_model)
     build_params(model_data, backend_model)
     build_variables(backend_model, model_data, subsets_config["variables"])
     build_expressions(backend_model, model_data, subsets_config["expressions"])
-    build_constraints(backend_model, model_data, subsets_config["constraints"])
+    build_constraints(backend_model, model_data, subsets_config["constraints"], constraints_config["constraints"])
     build_objective(backend_model)
     # FIXME: Optional constraints
     # FIXME re-enable loading custom objectives

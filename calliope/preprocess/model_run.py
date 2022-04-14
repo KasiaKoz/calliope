@@ -72,6 +72,10 @@ def model_run_from_yaml(
     subsets = AttrDict.from_yaml(
         os.path.join(os.path.dirname(calliope.__file__), "config", "subsets.yaml")
     )
+    # TODO combine subsets and (multiple, themed) constraints files
+    constraints = AttrDict.from_yaml(
+        os.path.join(os.path.dirname(calliope.__file__), "config", "constraints_if.yaml")
+    )
 
     return generate_model_run(
         config_with_overrides,
@@ -80,6 +84,7 @@ def model_run_from_yaml(
         overrides,
         scenario,
         subsets,
+        constraints
     )
 
 
@@ -117,6 +122,10 @@ def model_run_from_dict(
         os.path.join(os.path.dirname(calliope.__file__), "config", "subsets.yaml")
     )
 
+    constraints = AttrDict.from_yaml(
+        os.path.join(os.path.dirname(calliope.__file__), "config", "constraints_where.yaml")
+    )
+
     return generate_model_run(
         config_with_overrides,
         timeseries_dataframes,
@@ -124,6 +133,7 @@ def model_run_from_dict(
         overrides,
         scenario,
         subsets,
+        constraints
     )
 
 
@@ -684,6 +694,7 @@ def generate_model_run(
     applied_overrides,
     scenario,
     subsets,
+    constraints
 ):
     """
     Returns a processed model_run configuration AttrDict and a debug
@@ -737,6 +748,7 @@ def generate_model_run(
 
     # model_run["sets"] = all_sets
     model_run["subsets"] = subsets
+    model_run["constraints"] = constraints
     # model_run["constraint_sets"] = constraint_sets.generate_constraint_sets(model_run)
 
     # 8) Final sense-checking
