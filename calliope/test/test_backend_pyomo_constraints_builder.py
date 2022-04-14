@@ -17,10 +17,14 @@ def test_parsing_equation_with_square_brackets():
         'some_word[x, y] <= another_word[x, y]') == ['some_word[x, y]', '<=', 'another_word[x, y]']
 
 
-@pytest.mark.xfail()
 def test_parsing_equation_with_round_brackets():
     assert constraints.parse_equation_to_list(
         'A <= (B + C) * D') == ['A', '<=', ['B', '+', 'C'], '*', 'D']
+
+
+def test_parsing_equation_with_multiple_round_brackets():
+    assert constraints.parse_equation_to_list(
+        'A <= (B * (C - D)) * E') == ['A', '<=', ['B', '*', ['C', '-', 'D']], '*', 'E']
 
 
 def test_valid_simple_equation_passes_formatting_validation():

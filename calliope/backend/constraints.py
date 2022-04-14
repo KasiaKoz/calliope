@@ -41,6 +41,7 @@ def math_operation(operator: str, a, b):
         elif isinstance(b, float):
             return operate(a(backend_model, **kwargs), b)
         return operate(a(backend_model, **kwargs), b(backend_model, **kwargs))
+
     if operator in SUPPORTED_OPERATORS:
         operate = SUPPORTED_OPERATORS[operator]
         return template_operation
@@ -51,7 +52,8 @@ def math_operation(operator: str, a, b):
 def _combine_consecutive_operators(l: list):
     # The operators are assumed as characters that are non-alphanumeric or _
     # they are not checked against the supported operator for actually being understood at this point
-    combined_l = []
+    combined_l = [l[0]]
+    del l[0]
     while l:
         if not re.match(OPERATOR_PATTERN, l[0]):
             combined_l.append(l[0])
@@ -65,10 +67,27 @@ def _combine_consecutive_operators(l: list):
     return combined_l
 
 
-def parse_equation_to_list(equation: str):
+def _parse_equation_string_to_list(equation):
     eq_list = re.split(OPERATOR_PATTERN, equation)
     eq_list = [i.strip() for i in eq_list if i and i != ' ']
     return _combine_consecutive_operators(eq_list)
+
+
+def parse_equation_to_list(equation: str):
+    if ('(' in equation) and (')' in equation):
+        s_idx = equation.index('(')
+        e_idx = (len(equation) - 1) - equation[::-1].index(')')
+        if s_idx:
+            left = _parse_equation_string_to_list(equation[0:s_idx])
+        else:
+            left = []
+        if e_idx != len(equation) - 1:
+            right = _parse_equation_string_to_list(equation[e_idx + 1:])
+        else:
+            right = []
+        return left + [parse_equation_to_list(equation[s_idx + 1:e_idx])] + right
+    else:
+        return _parse_equation_string_to_list(equation)
 
 
 def _validate_equation_list_formatting(equation: list):
@@ -131,7 +150,6 @@ def _process_component(component, config):
         raise NotImplemented(f'Component: {component} could not be processed')
 
 
-
 def collapse_equation_list_on_next_operation(equation: list, config: dict):
     # TODO include brackets and order of evaluation
     operator_idx = _get_index_of_next_operator(equation)
@@ -155,9 +173,10 @@ def build_equation_from_component(component, config):
     """
     Returns a function(backend_model, **kwargs)
     """
+
     def conditional_function(backend_model, **kwargs):
         for c in conditions:
-            if 'if' in c and c['if'](backend_model, **kwargs):
+            if ('if' in c) and c['if'](backend_model, **kwargs):
                 return c['then'](backend_model, **kwargs)
             elif 'else' in c:
                 return c['else'](backend_model, **kwargs)
