@@ -29,7 +29,7 @@ OPERATOR_HIERARCHY = ['*', '**', '/', '+', '-', '>', '<', '>=', '<=', '==', '!='
 OPERATOR_PATTERN = r'([^a-zA-Z0-9_ \,\]\[])'
 NUMBER_PATTERN = r'([0-9])'
 EXPRESSION_PATTERN = r'(\w+)'
-FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)?\]'
+FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)?\]$'
 
 
 def math_operation(operator: str, a, b):
@@ -118,7 +118,9 @@ def _process_component(component, config):
     def function_template(backend_model, **kwargs):
         return get_param(backend_model, name, tuple([kwargs[var] for var in variables]))
 
-    if re.match(NUMBER_PATTERN, component):
+    if callable(component):
+        return component
+    elif re.match(NUMBER_PATTERN, component):
         return float(component)
     elif _is_function(component):
         name, variables = parse_function_string(component)
@@ -140,9 +142,6 @@ def collapse_equation_list_on_next_operation(equation: list, config: dict):
 
 
 def build_equation_from_string(equation, config):
-    # def function_template(backend_model, *args):
-    #     build_equation(equation)
-
     equation = parse_equation_to_list(equation)
     # check equation is valid first:
     _validate_equation_list_formatting(equation)
@@ -153,11 +152,21 @@ def build_equation_from_string(equation, config):
 
 
 def build_equation_from_component(component, config):
+    """
+    Returns a function(backend_model, **kwargs)
+    """
+    def conditional_function(backend_model, **kwargs):
+        for c in conditions:
+            if 'if' in c and c['if'](backend_model, **kwargs):
+                return c['then'](backend_model, **kwargs)
+            elif 'else' in c:
+                return c['else'](backend_model, **kwargs)
+
     if isinstance(component, list):
+        conditions = []
         for condition in component:
-            condition_succeeded, equation = evaluate_condition(condition)
-            if condition_succeeded:
-                return build_equation_from_string(equation, config)
+            conditions.append(build_condition(condition, config))
+        return conditional_function
     elif isinstance(component, str):
         if _is_function(component):
             # bypass equation build and skip to getting the param
@@ -201,20 +210,21 @@ def parse_function_string(string: str):
         raise NotImplemented(f'String {string} could not be understood as a function')
 
 
-def evaluate_condition(condition: dict):
+def build_condition(condition: dict, config):
     """
     Expects format {'if': string condition, 'then': string equation} or {'else': string equation}
     """
     if 'if' in condition:
-        condition_eval = False  # TODO
-        equation = condition['then']
+        return {
+            'if': build_equation_from_component(condition['if'], config),
+            'then': build_equation_from_component(condition['then'], config)
+        }
     elif 'else' in condition:
-        condition_eval = True
-        equation = condition['else']
+        return {
+            'else': build_equation_from_component(condition['else'], config)
+        }
     else:
         raise NotImplemented(f'Given condition {condition} does not match expected "if, then", or "else" format.')
-
-    return condition_eval, equation
 
 
 def create_valid_constraint_rule(model_data, name, config):

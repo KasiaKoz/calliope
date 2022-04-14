@@ -69,6 +69,10 @@ def test_string_function_with_malformed_brackets_is_not_a_function():
     assert not constraints._is_function('resource_unit[node, tech')
 
 
+def test_sting_equation_is_not_a_function():
+    assert not constraints._is_function('resource_unit[node, tech] + sth[node, tech]')
+
+
 def test_extracting_function_name_from_well_formed_function():
     assert constraints._extract_function_name('resource_unit[node, tech]') == 'resource_unit'
 
@@ -113,6 +117,14 @@ def test_building_wholly_numerical_equation():
     assert eqn(backend_model=None) == 3
 
 
+def test_wholly_numerical_equation_remains_constant_with_kwargs():
+    eqn = constraints.build_equation_from_string(
+        '1 + 2',
+        config={}
+    )
+    assert eqn(backend_model=None, x=1, y=1) == 3
+
+
 @pytest.fixture()
 def two_param_backend_model():
     backend_model = ConcreteModel()
@@ -125,7 +137,7 @@ def two_param_backend_model():
 
 
 def test_building_simple_equation(two_param_backend_model):
-    eqn = constraints.build_equation_from_string(
+    eqn = constraints.build_equation_from_component(
         f'{two_param_backend_model["param_1"]} + {two_param_backend_model["param_2"]}',
         config={}
     )
@@ -136,8 +148,73 @@ def test_building_simple_equation(two_param_backend_model):
     ) == two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']
 
 
+def test_building_equation_with_multiple_operations(two_param_backend_model):
+    eqn = constraints.build_equation_from_component(
+        f'{two_param_backend_model["param_1"]} + {two_param_backend_model["param_2"]} > 0',
+        config={}
+    )
+    assert (two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']) > 0
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == True
+
+
+def test_equation_with_conditional_statement_executes_if_then_component(two_param_backend_model):
+    config = {
+        'equation': [
+            {'if': f'{two_param_backend_model["param_1"]} == {two_param_backend_model["param_1_value"]}', # this is true
+             'then': f'{two_param_backend_model["param_1"]} == {two_param_backend_model["param_2"]}'}, # expected to evaluate to false
+            {'else': f'{two_param_backend_model["param_1"]} < {two_param_backend_model["param_2"]}'}  # expected to evaluates to true
+        ]
+    }
+    eqn = constraints.build_equation_from_component(
+        config['equation'],
+        config=config
+    )
+    assert (two_param_backend_model['param_1_value'] == two_param_backend_model['param_2_value']) == False
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == False
+
+
+def test_equation_with_conditional_statement_executes_else_component(two_param_backend_model):
+    config = {
+        'equation': [
+            {'if': f'{two_param_backend_model["param_1"]} != {two_param_backend_model["param_1_value"]}', # this is true
+             'then': f'{two_param_backend_model["param_1"]} == {two_param_backend_model["param_2"]}'}, # expected to evaluate to false
+            {'else': f'{two_param_backend_model["param_1"]} < {two_param_backend_model["param_2"]}'}  # expected to evaluates to true
+        ]
+    }
+    eqn = constraints.build_equation_from_component(
+        config['equation'],
+        config=config
+    )
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == (two_param_backend_model['param_1_value'] < two_param_backend_model['param_2_value'])
+
+
 def test_building_equation_with_components(two_param_backend_model):
-    eqn = constraints.build_equation_from_string(
+    eqn = constraints.build_equation_from_component(
+        'comp_a + comp_b',
+        config={'components': {'comp_a': two_param_backend_model["param_1"], 'comp_b': two_param_backend_model["param_2"]}}
+    )
+    assert eqn(
+        backend_model=two_param_backend_model['backend_model'],
+        x=two_param_backend_model['x_idx'],
+        y=two_param_backend_model['y_idx']
+    ) == two_param_backend_model['param_1_value'] + two_param_backend_model['param_2_value']
+
+
+@pytest.mark.xfail()
+def test_building_equation_with_conditional_components(two_param_backend_model):
+    eqn = constraints.build_equation_from_component(
         'comp_a + comp_b',
         config={'components': {'comp_a': two_param_backend_model["param_1"], 'comp_b': two_param_backend_model["param_2"]}}
     )
