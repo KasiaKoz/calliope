@@ -144,18 +144,27 @@ def _process_component(component, config):
     elif _is_function(component):
         name, variables = parse_function_string(component)
         return function_template
-    elif config['components']:
+    elif component in config['components']:
         return build_equation_from_component(config['components'][component], config)
     else:
         raise NotImplemented(f'Component: {component} could not be processed')
 
 
 def collapse_equation_list_on_next_operation(equation: list, config: dict):
-    # TODO include brackets and order of evaluation
+    # brackets have priority in order of evaluation, they are represented as nested lists
+    equation = [collapse_equation_list(item, config) if isinstance(item, list) else item for item in equation]
     operator_idx = _get_index_of_next_operator(equation)
     lhs = _process_component(equation[operator_idx - 1], config)
     rhs = _process_component(equation[operator_idx + 1], config)
     equation[operator_idx - 1:operator_idx + 2] = [math_operation(equation[operator_idx], lhs, rhs)]
+    if len(equation) == 1:
+        return equation[0]
+    return equation
+
+
+def collapse_equation_list(equation: list, config: dict):
+    while isinstance(equation, list):
+        equation = collapse_equation_list_on_next_operation(equation, config)
     return equation
 
 
@@ -164,9 +173,7 @@ def build_equation_from_string(equation, config):
     # check equation is valid first:
     _validate_equation_list_formatting(equation)
     # TODO add more logic/domain checks
-    while len(equation) > 1:
-        equation = collapse_equation_list_on_next_operation(equation, config)
-    return equation[0]
+    return collapse_equation_list(equation, config)
 
 
 def build_equation_from_component(component, config):

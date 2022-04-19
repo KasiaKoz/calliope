@@ -98,19 +98,53 @@ def test_extracting_function_variables_from_malformed_function_also_works():
 
 
 def test_ordering_operators_in_simple_equation():
-    sorted_idx = constraints._get_operator_hierarchy(['A', '==', 'B', '+', 'C'])
-    assert sorted_idx == [3, 1]
+    idx = constraints._get_index_of_next_operator(['A', '==', 'B', '+', 'C'])
+    assert idx == 3
 
 
 def test_ordering_operators_in_a_complex_equation():
-    sorted_idx = constraints._get_operator_hierarchy(['A', '==', 'B', '+', 'C', '*', 'D'])
-    assert sorted_idx == [5, 3, 1]
+    idx = constraints._get_index_of_next_operator(['A', '==', 'B', '+', 'C', '*', 'D'])
+    assert idx == 5
 
 
-@pytest.mark.xfail()
-def test_ordering_operators_in_a_equation_with_brackets():
-    sorted_idx = constraints._get_operator_hierarchy(['A', '==', ['B', '+', 'C'], '*', 'D'])
-    assert sorted_idx == [3, 5, 1]
+def test_collapse_simple_equation_once():
+    collapsed_list = constraints.collapse_equation_list_on_next_operation(['3', '==', '2', '+', '1'], config={})
+    assert len(collapsed_list) == 3
+    operation = collapsed_list[-1]
+    assert callable(operation)
+    assert operation(backend_model=None) == 3
+    assert collapsed_list == ['3', '==', operation]
+
+
+def test_collapse_complex_equation_once():
+    collapsed_list = constraints.collapse_equation_list_on_next_operation(
+        ['11', '==', '3', '+', '2', '*', '4'], config={})
+    assert len(collapsed_list) == 5
+    operation = collapsed_list[-1]
+    assert callable(operation)
+    assert operation(backend_model=None) == 8
+    assert collapsed_list == ['11', '==', '3', '+', operation]
+
+
+def test_collapse_equation_with_brackets_once_collapses_bracket_inside_and_the_next_operation():
+    collapsed_list = constraints.collapse_equation_list_on_next_operation(
+        ['20', '==', ['3', '+', '2'], '*', '4'], config={})
+    assert len(collapsed_list) == 3
+    operation = collapsed_list[-1]
+    assert callable(operation)
+    assert operation(backend_model=None) == 20
+    assert collapsed_list == ['20', '==', operation]
+
+
+def test_collapse_equation_with_multiple_brackets_collapses_brackets_inside_and_the_next_operation():
+    collapsed_list = constraints.collapse_equation_list_on_next_operation(
+        ['184', '==', ['6', '+', ['2', '**', '3'], '*', '5'], '*', '4'], config={})
+    # (6 + (8 * 5)) * 4
+    assert len(collapsed_list) == 3
+    operation = collapsed_list[-1]
+    assert callable(operation)
+    assert operation(backend_model=None) == 184
+    assert collapsed_list == ['184', '==', operation]
 
 
 def test_building_wholly_numerical_equation():
@@ -300,7 +334,7 @@ def balance_supply_plus_constraint_config():
 @pytest.mark.xfail()
 def test_creating_constraint_function_from_constraint_dictionary(balance_supply_constraint_config):
     rule = constraints.create_valid_constraint_rule(None, 'balance_supply', balance_supply_constraint_config)
-    rule(None, node='1', tech='2')
+    rule(backend_model=None)
 
 
 @pytest.mark.xfail()
