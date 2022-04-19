@@ -29,7 +29,8 @@ OPERATOR_HIERARCHY = ['*', '**', '/', '+', '-', '>', '<', '>=', '<=', '==', '!='
 OPERATOR_PATTERN = r'([^a-zA-Z0-9_ \,\]\[])'
 NUMBER_PATTERN = r'([0-9])'
 EXPRESSION_PATTERN = r'(\w+)'
-FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)?\]$'
+MULTIPLE_VAR_FUNCTION_PATTERN = r'(\w+)\[\w+(, \w+)+\]$'
+SINGLE_VAR_FUNCTION_PATTERN = r'(\w+)\[\w+\]$'
 
 
 def math_operation(operator: str, a, b):
@@ -141,6 +142,7 @@ def _process_component(component, config):
         return component
     elif re.match(NUMBER_PATTERN, component):
         return float(component)
+    # add bool components
     elif _is_function(component):
         name, variables = parse_function_string(component)
         return function_template
@@ -208,7 +210,7 @@ def _is_function(string: str):
     """
     Checks for pattern in string such as: function_name[var1, var2]
     """
-    return bool(re.match(FUNCTION_PATTERN, string))
+    return bool(re.match(MULTIPLE_VAR_FUNCTION_PATTERN, string)) or bool(re.match(SINGLE_VAR_FUNCTION_PATTERN, string))
 
 
 def _extract_function_name(string: str):
@@ -255,12 +257,10 @@ def build_condition(condition: dict, config):
 
 def create_valid_constraint_rule(model_data, name, config):
     """
+    Returns a function of (backend_model, **kwargs)
     """
-
-    def function_template(backend_model, **kwargs):
-        return build_equation_from_component(config['equation'], backend_model, config)
 
     # TODO port subset masking here possibly
     # subsets = ...
     # todo? replace function calling on config for conditions within the template
-    return function_template
+    return build_equation_from_component(config['equation'], config)
